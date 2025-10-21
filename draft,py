@@ -1,0 +1,583 @@
+from mcp.server.fastmcp import FastMCP
+from dotenv import load_dotenv
+import os
+from loguru import logger
+from typing import Optional
+from datetime import datetime
+import asyncpraw
+import asyncio
+import google.generativeai as genai
+
+from app.base import BaseAsyncRequest
+from app.schemas.posts import BasePost, RedditPost, YoutubePost
+from app.const.url import YOUTUBE
+
+load_dotenv()
+
+# Initialize Gemini
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+gemini_model = genai.GenerativeModel("gemini-1.5-flash")
+
+mcp = FastMCP("trending-crawlers")
+
+# ============================================================================
+# Configuration & Setup
+# ============================================================================
+
+REDDIT_CLIENT_ID = os.getenv("REDDIT_CLIENT_ID")
+REDDIT_CLIENT_SECRET = os.getenv("REDDIT_CLIENT_SECRET")
+REDDIT_USER_AGENT = os.getenv("REDDIT_USER_AGENT", "trending_analyzer_v1.0")
+
+# ============================================================================
+# Reddit Crawler
+# ============================================================================
+
+class RedditTrendingCrawler:
+    """Crawler for Reddit trending posts using asyncpraw."""
+    
+    def __init__(self, user_agent: str = "trending_analyzer_v1.0"):
+        self.user_agent = user_agent
+        self.reddit = None
+
+    async def _initialize_reddit(self):
+        """Initialize Reddit client lazily."""
+        if self.reddit is None:
+            try:
+                self.reddit = asyncpraw.Reddit(
+                    client_id=REDDIT_CLIENT_ID,
+                    client_secret=REDDIT_CLIENT_SECRET,
+                    user_agent=self.user_agent
+                )
+            except Exception as e:
+                logger.error(f"Failed to initialize Reddit client: {e}")
+                raise e
+
+    async def close(self):
+        """Close the Reddit client."""
+        if self.reddit:
+            await self.reddit.close()
+            self.reddit = None
+
+    async def get_trending_posts(
+        self,
+        subreddit_name: str = "all",
+        limit: int = 50,
+        time_filter: str = "day"
+    ) -> list[dict]:
+        """
+        Fetch trending posts from a Reddit subreddit using asyncpraw.
+        
+        Args:
+            subreddit_name: Subreddit to fetch from (default: 'all')
+            limit: Number of posts to fetch (default: 50, max: 100)
+            time_filter: Time filter - 'day', 'week', 'month', 'year', 'all'
+        
+        Returns:
+            List of BasePost objects with RedditPost metadata
+        """
+        try:
+            await self._initialize_reddit()
+            
+            subreddit = await self.reddit.subreddit(subreddit_name)
+            trending_posts = []
+            
+            async for post in subreddit.top(time_filter=time_filter, limit=limit):
+                try:
+                    author_name = post.author.name if post.author else "[deleted]"
+                except Exception:
+                    author_name = "[deleted]"
+                
+                reddit_post = BasePost(
+                    source="reddit",
+                    title=post.title,
+                    content=post.selftext,
+                    author=author_name,
+                    url=post.url,
+                    created_at=datetime.fromtimestamp(post.created_utc),
+                    metadata=RedditPost(
+                        post_id=post.id,
+                        permalink=f"https://reddit.com{post.permalink}",
+                        upvote_ratio=post.upvote_ratio
+                    ),
+                    relevance_score=post.upvote_ratio * post.score / 100 if post.upvote_ratio else 0
+                )
+                trending_posts.append(reddit_post.model_dump())
+            
+            return sorted(trending_posts, key=lambda x: x.get("relevance_score", 0), reverse=True)
+        
+        except Exception as e:
+            logger.error(f"Error fetching trending posts from r/{subreddit_name}: {e}")
+            return [{"error": str(e), "subreddit": subreddit_name}]
+
+
+# ============================================================================
+# YouTube Crawler (using BaseAsyncRequest)
+# ============================================================================
+
+class YoutubeTrendingCrawler(BaseAsyncRequest):
+    """Crawler for YouTube trending videos using BaseAsyncRequest."""
+    
+    def __init__(self):
+        api_key = os.getenv("YOUTUBE_API_KEY")
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+        }
+        super().__init__(YOUTUBE, headers)
+    
+    def _get_full_endpoint(self, path: str = "") -> str:
+        """Build full endpoint URL."""
+        return f"{self.url}{path}"
+
+    async def health_check(self) -> dict:
+        """Health check for YouTube API."""
+        try:
+            response = await self.get(
+                "/videos",
+                params={"part": "snippet", "chart": "mostPopular", "maxResults": 1}
+            )
+            return {"status": "healthy", "service": "youtube"}
+        except Exception as e:
+            logger.error(f"YouTube health check failed: {e}")
+            return {"status": "unhealthy", "service": "youtube", "error": str(e)}
+
+    async def get_trending_videos(
+        self,
+        region_code: str = "US",
+        max_results: int = 10,
+        category_id: Optional[str] = None
+    ) -> list[dict]:
+        """
+        Fetch trending videos from YouTube for a specific region.
+        
+        Args:
+            region_code: ISO 3166-1 alpha-2 country code (default: 'US')
+            max_results: Number of videos to fetch (default: 10, max: 50)
+            category_id: Optional YouTube category ID (e.g., '10' for music, '17' for sports)
+        
+        Returns:
+            List of BasePost objects with YoutubePost metadata
+        """
+        params = {
+            "part": "snippet,contentDetails,statistics",
+            "chart": "mostPopular",
+            "regionCode": region_code,
+            "maxResults": min(max_results, 50),
+        }
+        
+        if category_id:
+            params["videoCategoryId"] = category_id
+        
+        try:
+            response = await self.get(
+                "/videos",
+                params=params,
+                timeout=30.0
+            )
+            
+            trending_videos = []
+            for item in response.get("items", []):
+                youtube_post = BasePost(
+                    source="youtube",
+                    title=item["snippet"]["title"],
+                    content=item["snippet"]["description"],
+                    author=item["snippet"]["channelTitle"],
+                    url=f"https://www.youtube.com/watch?v={item['id']}",
+                    created_at=item["snippet"]["publishedAt"],
+                    metadata=YoutubePost(
+                        video_id=item["id"],
+                        view_count=int(item["statistics"].get("viewCount", 0)),
+                        like_count=int(item["statistics"].get("likeCount", 0)),
+                        thumbnail=item["snippet"]["thumbnails"]["high"]["url"]
+                    ),
+                    relevance_score=self._calculate_relevance(item["statistics"])
+                )
+                trending_videos.append(youtube_post.model_dump())
+            
+            return trending_videos
+        
+        except Exception as e:
+            logger.error(f"Error fetching YouTube trending videos for {region_code}: {e}")
+            return [{"error": str(e), "region": region_code}]
+    
+    @staticmethod
+    def _calculate_relevance(statistics: dict) -> float:
+        """Calculate relevance score based on views and likes."""
+        view_count = int(statistics.get("viewCount", 0))
+        like_count = int(statistics.get("likeCount", 0))
+        
+        if view_count == 0:
+            return 0.0
+        
+        like_ratio = like_count / view_count if view_count > 0 else 0
+        # Normalize to 0-1 scale (typical like ratio is 1-5%)
+        return min(like_ratio * 20, 1.0)
+
+
+# ============================================================================
+# Initialize Crawlers
+# ============================================================================
+
+reddit_crawler = RedditTrendingCrawler(user_agent=REDDIT_USER_AGENT)
+youtube_crawler = YoutubeTrendingCrawler()
+
+# ============================================================================
+# MCP Tools
+# ============================================================================
+
+@mcp.tool()
+async def reddit_trending(
+    subreddit: str = "all",
+    limit: int = 50,
+    time_filter: str = "day"
+) -> dict | list:
+    """
+    Get trending posts from Reddit with structured schema.
+    
+    Args:
+        subreddit: Subreddit name to fetch from (default: 'all')
+        limit: Number of posts to fetch, max 100 (default: 50)
+        time_filter: Time filter - 'day', 'week', 'month', 'year', 'all' (default: 'day')
+    
+    Returns:
+        List of trending Reddit posts with BasePost schema and RedditPost metadata
+    """
+    result = await reddit_crawler.get_trending_posts(
+        subreddit_name=subreddit,
+        limit=min(limit, 100),
+        time_filter=time_filter
+    )
+    return {
+        "source": "reddit",
+        "subreddit": subreddit,
+        "count": len(result),
+        "posts": result,
+        "fetched_at": datetime.now().isoformat()
+    }
+
+
+@mcp.tool()
+async def youtube_trending(
+    region_code: str = "US",
+    max_results: int = 10,
+    category_id: Optional[str] = None
+) -> dict | list:
+    """
+    Get trending videos from YouTube with structured schema.
+    
+    Args:
+        region_code: ISO 3166-1 alpha-2 country code (default: 'US')
+        max_results: Number of videos to fetch, max 50 (default: 10)
+        category_id: Optional YouTube category ID (e.g., '10' for music, '17' for sports)
+    
+    Returns:
+        List of trending YouTube videos with BasePost schema and YoutubePost metadata
+    """
+    result = await youtube_crawler.get_trending_videos(
+        region_code=region_code,
+        max_results=max_results,
+        category_id=category_id
+    )
+    return {
+        "source": "youtube",
+        "region": region_code,
+        "count": len(result),
+        "videos": result,
+        "fetched_at": datetime.now().isoformat()
+    }
+
+
+@mcp.tool()
+async def compare_trending(
+    subreddit: str = "all",
+    region_code: str = "US",
+    reddit_limit: int = 20,
+    youtube_results: int = 10,
+    youtube_category: Optional[str] = None
+) -> dict:
+    """
+    Get trending content from both Reddit and YouTube for comparison.
+    
+    Args:
+        subreddit: Reddit subreddit to fetch from (default: 'all')
+        region_code: YouTube region code (default: 'US')
+        reddit_limit: Number of Reddit posts to fetch (default: 20)
+        youtube_results: Number of YouTube videos to fetch (default: 10)
+        youtube_category: Optional YouTube category ID for filtering
+    
+    Returns:
+        Dictionary containing both Reddit and YouTube trending data with timestamps
+    """
+    reddit_result = await reddit_crawler.get_trending_posts(
+        subreddit_name=subreddit,
+        limit=reddit_limit,
+        time_filter="day"
+    )
+    
+    youtube_result = await youtube_crawler.get_trending_videos(
+        region_code=region_code,
+        max_results=youtube_results,
+        category_id=youtube_category
+    )
+    
+    return {
+        "reddit": {
+            "subreddit": subreddit,
+            "count": len(reddit_result),
+            "posts": reddit_result
+        },
+        "youtube": {
+            "region": region_code,
+            "count": len(youtube_result),
+            "videos": youtube_result
+        },
+        "fetched_at": datetime.now().isoformat()
+    }
+
+
+# ============================================================================
+# Tag Router Logic
+# ============================================================================
+
+TAG_ROUTES = {
+    "reddit": ["discussion", "community", "news", "social", "meme", "ask"],
+    "youtube": ["video", "entertainment", "music", "tutorial", "vlog", "channel"],
+    "huggingface": ["model", "dataset", "paper", "ai", "ml", "nlp", "computer vision"],
+    "both": ["trending", "viral", "popular", "top"]
+}
+
+def _determine_crawler_from_tags(tags: list[str]) -> dict:
+    """
+    Pure logic to determine which crawler(s) to use based on tags.
+    
+    Args:
+        tags: List of tags to analyze
+    
+    Returns:
+        Dictionary with crawlers to use and their parameters
+    """
+    tags_lower = [t.lower() for t in tags]
+    
+    reddit_match = sum(1 for t in tags_lower if any(rt in t for rt in TAG_ROUTES["reddit"]))
+    youtube_match = sum(1 for t in tags_lower if any(yt in t for yt in TAG_ROUTES["youtube"]))
+    huggingface_match = sum(1 for t in tags_lower if any(hf in t for hf in TAG_ROUTES["huggingface"]))
+    both_match = sum(1 for t in tags_lower if any(bt in t for bt in TAG_ROUTES["both"]))
+    
+    crawlers = []
+    
+    if both_match > 0:
+        # Use all crawlers if "trending" or "popular" tags are present
+        crawlers = ["reddit", "youtube", "huggingface"]
+    elif huggingface_match >= 2:
+        crawlers = ["huggingface"]
+    elif youtube_match >= 2:
+        crawlers = ["youtube"]
+    elif reddit_match >= 2:
+        crawlers = ["reddit"]
+    elif huggingface_match > 0:
+        crawlers = ["huggingface", "reddit"]
+    elif youtube_match > 0:
+        crawlers = ["youtube", "reddit"]
+    else:
+        crawlers = ["reddit"]  # default to reddit
+    
+    return {
+        "crawlers": crawlers,
+        "reddit_subreddit": tags_lower[0] if tags_lower else "all",
+        "youtube_search_query": " ".join(tags_lower) if tags_lower else None,
+        "huggingface_search_query": " ".join(tags_lower) if tags_lower else None
+    }
+
+
+async def _extract_tags_with_gemini(user_query: str) -> list[str]:
+    """
+    Use Gemini to extract tags from user query.
+    
+    Args:
+        user_query: User's natural language query
+    
+    Returns:
+        List of extracted tags
+    """
+    try:
+        prompt = f"""Extract 3-5 relevant tags from this query. Return only the tags separated by commas, no explanation.
+Query: {user_query}
+Tags:"""
+        
+        response = await asyncio.to_thread(
+            gemini_model.generate_content,
+            prompt
+        )
+        
+        tags = [t.strip() for t in response.text.split(",")]
+        logger.info(f"Extracted tags from query: {tags}")
+        return tags
+    
+    except Exception as e:
+        logger.error(f"Error extracting tags with Gemini: {e}")
+        return []
+
+
+async def search_huggingface(query: str, limit: int = 10) -> list[dict]:
+    """
+    Search HuggingFace Hub for models and datasets.
+    
+    Args:
+        query: Search query (e.g., "transformer model")
+        limit: Number of results to fetch (default: 10)
+    
+    Returns:
+        List of HuggingFace results (models/datasets)
+    """
+    if not query:
+        return []
+    
+    try:
+        # Search models
+        models_url = "https://huggingface.co/api/models"
+        models_params = {
+            "search": query,
+            "limit": limit,
+            "sort": "likes",
+            "direction": -1
+        }
+        
+        models_response = await asyncio.to_thread(
+            lambda: __import__("requests").get(models_url, params=models_params, timeout=10)
+        )
+        models_data = models_response.json() if models_response.status_code == 200 else []
+        
+        results = []
+        for model in models_data[:limit]:
+            results.append({
+                "type": "model",
+                "name": model.get("id", ""),
+                "description": model.get("downloads", 0),
+                "url": f"https://huggingface.co/{model.get('id', '')}",
+                "likes": model.get("likes", 0),
+                "tags": model.get("tags", [])
+            })
+        
+        logger.info(f"Found {len(results)} HuggingFace models for '{query}'")
+        return results
+    
+    except Exception as e:
+        logger.error(f"Error searching HuggingFace for '{query}': {e}")
+        return []
+
+
+@mcp.tool()
+async def process_interest(
+    tags: Optional[list[str]] = None,
+    user_query: Optional[str] = None
+) -> dict:
+    """
+    Process user interest and fetch trending content from appropriate crawlers.
+    
+    This is the ONLY exposed MCP tool - the main entry point for clients.
+    
+    Args:
+        tags: List of tags (e.g., ["python", "discussion", "tutorial"])
+        user_query: Natural language query (e.g., "Show me trending AI discussions")
+    
+    Returns:
+        Trending content from appropriate crawlers based on interest
+    """
+    if not tags and not user_query:
+        return {"error": "Either tags or user_query must be provided"}
+    
+    # Extract tags from query if provided
+    if user_query and not tags:
+        tags = await _extract_tags_with_gemini(user_query)
+        if not tags:
+            return {"error": "Failed to extract tags from query"}
+    
+    # Determine which crawlers to use
+    route = _determine_crawler_from_tags(tags)
+    crawlers = route["crawlers"]
+    
+    results = {
+        "tags": tags,
+        "crawlers_used": crawlers,
+        "data": {},
+        "fetched_at": datetime.now().isoformat()
+    }
+    
+    # Fetch from determined crawlers
+    if "reddit" in crawlers:
+        reddit_result = await _get_reddit_posts(
+            subreddit=route["reddit_subreddit"],
+            limit=20
+        )
+        results["data"]["reddit"] = {
+            "subreddit": route["reddit_subreddit"],
+            "count": len(reddit_result),
+            "posts": reddit_result
+        }
+    
+    if "youtube" in crawlers:
+        youtube_result = await _get_youtube_videos(
+            query=route["youtube_search_query"],
+            max_results=10
+        )
+        results["data"]["youtube"] = {
+            "query": route["youtube_search_query"],
+            "count": len(youtube_result),
+            "videos": youtube_result
+        }
+    
+    if "huggingface" in crawlers:
+        hf_result = await search_huggingface(route["huggingface_search_query"])
+        results["data"]["huggingface"] = {
+            "query": route["huggingface_search_query"],
+            "count": len(hf_result),
+            "results": hf_result
+        }
+    
+    return results
+
+
+@mcp.tool()
+async def health_check() -> dict:
+    """
+    Check health status of all crawlers and services.
+    
+    Returns:
+        Health status for Reddit and YouTube services
+    """
+    youtube_health = await youtube_crawler.health_check()
+    
+    reddit_health = {
+        "status": "healthy" if reddit_crawler.reddit else "initializing",
+        "service": "reddit"
+    }
+    
+    try:
+        await reddit_crawler._initialize_reddit()
+        reddit_health["status"] = "healthy"
+    except Exception as e:
+        reddit_health["status"] = "unhealthy"
+        reddit_health["error"] = str(e)
+    
+    return {
+        "services": {
+            "reddit": reddit_health,
+            "youtube": youtube_health
+        },
+        "checked_at": datetime.now().isoformat()
+    }
+
+
+async def shutdown_crawlers():
+    """Close all crawler connections gracefully."""
+    try:
+        await reddit_crawler.close()
+        logger.info("Reddit crawler closed")
+    except Exception as e:
+        logger.error(f"Error closing Reddit crawler: {e}")
+
+
+if __name__ == "__main__":
+    try:
+        mcp.run(transport="stdio")
+    finally:
+        asyncio.run(shutdown_crawlers())
