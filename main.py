@@ -48,7 +48,7 @@ async def process_interest(
     # Fetch from determined crawlers
     if "reddit" in crawlers:
         reddit_result = await reddit_crawler.get_trending_posts(
-            subreddit_name=route["reddit_subreddit"],
+            subreddit_name="Vietnam",
             limit=20
         )
 

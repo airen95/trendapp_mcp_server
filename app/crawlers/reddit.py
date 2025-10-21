@@ -57,7 +57,7 @@ class RedditTrendingCrawler:
                         relevance_score=post.upvote_ratio * post.score / 100 if post.upvote_ratio else 0
                     )
                 )            
-            return sorted(trending_posts, key=lambda x: x['score'], reverse=True)
+            return trending_posts
         except Exception as e:
             print(f"Error fetching trending posts from r/{subreddit_name}: {e}")
             return []

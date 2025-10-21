@@ -3,6 +3,7 @@ from typing import List, Dict
 
 from .base import BaseAsyncRequest
 from app.const.url import HUGGINGFACE
+from app.schemas.posts import BasePost
 
 
 class HuggingFaceCrawler(BaseAsyncRequest):
