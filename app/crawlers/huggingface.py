@@ -16,12 +16,9 @@ class HuggingFaceCrawler(BaseAsyncRequest):
         url = "https://huggingface-paper-explorer.vercel.app/api/papers?timeFrame=today"
         
         try:
-            params = {
-                "timeFrame": "today"
-            }
+
             response = await self.get(
-                path="papers",
-                params=params
+                path="papers?timeFrame=today",
             )
             
             trending_list = []
@@ -33,3 +30,6 @@ class HuggingFaceCrawler(BaseAsyncRequest):
         except requests.exceptions.RequestException as e:
             print(f"Error fetching trending models: {e}")
             return []
+        
+    async def health_check(self):
+        return await super().health_check()

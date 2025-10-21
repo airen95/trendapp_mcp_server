@@ -16,6 +16,16 @@ class BaseAsyncRequest(ABC):
     def set_content_type(self, content_type: str) -> None:
         self.default_content_type = content_type
         self.headers["Content-Type"] = content_type
+
+    def _get_full_endpoint(self, path: str) -> str:
+        """
+        Construct the full endpoint URL.
+        """
+        # Ensure path starts with / if not empty
+        if path and not path.startswith("/"):
+            path = f"/{path}"
+            
+        return f"{self.url}{path}"
         
     async def _get_session(self) -> aiohttp.ClientSession:
         """

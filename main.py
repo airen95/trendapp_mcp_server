@@ -1,4 +1,4 @@
-from mcp.server.fastmcp import FastMCP
+from fastmcp import FastMCP
 from app.crawlers import (RedditTrendingCrawler, 
                           YoutubeTrendingCrawler,
                           HuggingFaceCrawler)
@@ -35,7 +35,7 @@ async def process_interest(
     crawl_router = DetermineTags(tags=tags, user_query=user_query)
 
     # Determine crawlers
-    route = crawl_router.extract_input()
+    route = await crawl_router.extract_input()
     crawlers = route["crawlers"]
     
     results = {
@@ -82,4 +82,4 @@ async def process_interest(
     return results
 
 if __name__ == "__main__":
-    mcp.run(transport="stdio")
+    mcp.run(transport="http")
