@@ -4,13 +4,12 @@ from .base import BaseAsyncRequest
 from app.const.url import YOUTUBE
 from app.schemas.posts import YoutubePost, BasePost
 from loguru import logger
+from datetime import datetime
 
 
 class YoutubeTrendingCrawler(BaseAsyncRequest):
     def __init__(self):
-        headers = {
-            "Authorization": f"Bearer {settings.YOUTUBE_API_KEY}",
-        }
+        headers = {}
         super().__init__(YOUTUBE, headers)
 
     async def health_check(self) -> dict:
@@ -43,6 +42,7 @@ class YoutubeTrendingCrawler(BaseAsyncRequest):
             'chart': 'mostPopular',
             'regionCode': region_code,
             'maxResults': max_results,
+            "key": settings.YOUTUBE_API_KEY
         }
         
         try:
@@ -56,11 +56,14 @@ class YoutubeTrendingCrawler(BaseAsyncRequest):
             for item in response.get('items', []):
                 trending_videos.append(
                     BasePost(
+                        source="youtube",
                         title=item['snippet']['title'],
                         content=item['snippet']['description'],
                         created_at=item['snippet']['publishedAt'],
                         author=item['snippet']['channelTitle'],
-                        metadata=YoutubePost(
+                        url=f"https://www.youtube.com/watch?v=${item['id']}",
+                        tags=['video'],
+                        metadata_=YoutubePost(
                             video_id=item['id'],
                             view_count=item['statistics'].get('viewCount', 0),
                             like_count=item['statistics'].get('likeCount', 0),

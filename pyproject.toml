@@ -7,8 +7,10 @@ requires-python = ">=3.12"
 dependencies = [
     "aiohttp>=3.13.1",
     "asyncpraw>=7.8.1",
+    "beautifulsoup4>=4.14.2",
     "fastmcp>=2.12.5",
     "httpx>=0.28.1",
     "langchain-google-genai>=3.0.0",
     "loguru>=0.7.3",
+    "selenium>=4.37.0",
 ]

@@ -1,18 +1,9 @@
-from typing import Optional
-from loguru import logger
-
 from app.const.tags import TAG_ROUTES
-from app.llm.gemini import LangChainGoogleGenerative
-from app.settings import settings
 
-gemini_llm = LangChainGoogleGenerative(
-    apiKey=settings.GEMINI_KEY
-)
 
 class DetermineTags:
-    def __init__(self, tags: Optional[list[str]] = None, user_query: Optional[str] = None):
+    def __init__(self, tags: list[str]):
         self.tags = tags
-        self.user_query = user_query
 
     def determine_crawler_from_tags(self) -> dict:
         tags_lower = [t.lower() for t in self.tags]
@@ -47,25 +38,3 @@ class DetermineTags:
             "huggingface_search_query": " ".join(tags_lower) if tags_lower else None
         }
 
-
-    async def extract_tags_with_gemini(self) -> list[str]:
-
-        try:
-            prompt = f"""Extract 3-5 relevant tags from this query. Return only the tags separated by commas, no explanation.
-                    Query: {self.user_query}
-                    Tags:"""
-            
-            response = await gemini_llm.generate_response(user_message=prompt)
-            
-            tags = [t.strip() for t in response.text.split(",")]
-            logger.info(f"Extracted tags from query: {tags}")
-            return tags
-        
-        except Exception as e:
-            logger.error(f"Error extracting tags with Gemini: {e}")
-            return []
-        
-    async def extract_input(self):
-        if not self.tags:
-            self.tags = await self.extract_tags_with_gemini()
-        return self.determine_crawler_from_tags()
