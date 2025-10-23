@@ -7,8 +7,8 @@ async def fetch_trending_content(tags=None, user_query=None):
     async with client:
         response = await client.call_tool(
             "process_interest",
-            {"tags": tags, "user_query": user_query}
+            {"tags": tags}
         )
         print(response)
 
-asyncio.run(fetch_trending_content(tags=["AI", 'video', 'news'], user_query=None))
+asyncio.run(fetch_trending_content(tags=["discussion", "ai"], user_query=None))

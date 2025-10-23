@@ -12,5 +12,6 @@ dependencies = [
     "httpx>=0.28.1",
     "langchain-google-genai>=3.0.0",
     "loguru>=0.7.3",
+    "openai>=2.6.0",
     "selenium>=4.37.0",
 ]

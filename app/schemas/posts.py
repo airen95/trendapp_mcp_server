@@ -11,7 +11,6 @@ class BasePost(BaseModel):
     url: Optional[str] = None
     tags: list[str] = []
     created_at: datetime = Field(datetime.now())
-    relevance_score: Optional[float] = None
     metadata_: Optional[Any] = None
 
 class YoutubePost(BaseModel):
@@ -32,3 +31,6 @@ class HFPost(BaseModel):
 class ToolResponse(BaseModel):
     data: list[Any]
     total: Optional[int] = None
+
+class GoogleSearchMetadata(BaseModel):
+    thumbnail: str

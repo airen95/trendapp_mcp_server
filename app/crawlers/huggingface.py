@@ -6,13 +6,12 @@ from .base import BaseAsyncRequest, BaseHTMLRequest
 from app.const.url import HUGGINGFACE
 from app.schemas.posts import BasePost, HFPost
 
-
 class HuggingFaceCrawler(BaseAsyncRequest):
     def __init__(self):
         super().__init__(HUGGINGFACE, {})
         self.parser = BaseHTMLRequest()
 
-    async def get_trending_papers(self) -> List[Dict]:
+    async def get_trending_papers(self, tags: list[str] = ['paper']) -> List[Dict]:
         """
         Get trending models from Hugging Face
         """
@@ -37,7 +36,8 @@ class HuggingFaceCrawler(BaseAsyncRequest):
                     metadata_=HFPost(
                         thumbnail=paper.get("image"),
                         upvotes=paper.get("upvotes")
-                    )
+                    ),
+                    tags=set(tags)
                 ),
                 )
                 await asyncio.sleep(0.5)

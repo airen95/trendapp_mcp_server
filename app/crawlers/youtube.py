@@ -24,7 +24,10 @@ class YoutubeTrendingCrawler(BaseAsyncRequest):
             logger.error(f"YouTube health check failed: {e}")
             return {"status": "unhealthy", "service": "youtube", "error": str(e)}
 
-    async def get_trending_videos(self, region_code: str = 'US', max_results: int = 10) -> list[dict]:
+    async def get_trending_videos(self, region_code: str = 'VN',
+                                  max_results: int = 5,
+                                  category_id: int = None,
+                                  tags: list[str] = ['top-chart']) -> list[dict]:
         """
         Fetch trending videos from YouTube for a specific region.
         
@@ -42,7 +45,8 @@ class YoutubeTrendingCrawler(BaseAsyncRequest):
             'chart': 'mostPopular',
             'regionCode': region_code,
             'maxResults': max_results,
-            "key": settings.YOUTUBE_API_KEY
+            "key": settings.YOUTUBE_API_KEY,
+            "videoCategoryId": category_id
         }
         
         try:
@@ -62,14 +66,13 @@ class YoutubeTrendingCrawler(BaseAsyncRequest):
                         created_at=item['snippet']['publishedAt'],
                         author=item['snippet']['channelTitle'],
                         url=f"https://www.youtube.com/watch?v=${item['id']}",
-                        tags=['video'],
+                        tags=set(tags),
                         metadata_=YoutubePost(
                             video_id=item['id'],
                             view_count=item['statistics'].get('viewCount', 0),
                             like_count=item['statistics'].get('likeCount', 0),
                             thumbnail=item['snippet']['thumbnails']['high']['url']
                         ),
-                        relevance_score=self._calculate_relevance(item["statistics"])
                     )
                 )
             return trending_videos
