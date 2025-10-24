@@ -24,7 +24,7 @@ class HuggingFaceCrawler(BaseAsyncRequest):
             )
             
             trending_list = []
-            for paper in response:
+            for paper in response[:3]:
                 paper_url = paper.get("link")
                 content = await self.get_paper_content(paper_url)
                 trending_list.append(BasePost(

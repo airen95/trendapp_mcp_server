@@ -116,7 +116,6 @@ async def process_interest(
                 
             elif crawler_name == "huggingface":
                 results = await _fetch_huggingface(
-                    search_query=params.get("search_query"),
                     tags=assigned_tags
                 )
                 all_data.extend(results)
@@ -197,12 +196,10 @@ async def _fetch_reddit(
 
 
 async def _fetch_huggingface(
-    search_query: str,
     tags: list[str]
 ) -> list[dict[str, Any]]:
     """Fetch from HuggingFace"""
     papers = await hugging_crawler.get_trending_papers(
-        search_query=search_query,
         tags=tags
     )
 

@@ -9,6 +9,8 @@ async def fetch_trending_content(tags=None, user_query=None):
             "process_interest",
             {"tags": tags}
         )
-        print(response)
+        with open("trending_content.json", "w") as f:
+            import json
+            json.dump(response, f, indent=4)
 
 asyncio.run(fetch_trending_content(tags=["discussion", "ai"], user_query=None))

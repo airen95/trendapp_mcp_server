@@ -1,6 +1,5 @@
 from .base import BaseAsyncRequest
 from app.const.url import SERP
-from app.const.tags import GOOGLE_TRENDS_CATEGORIES
 from app.settings import settings
 from app.schemas.posts import BasePost, GoogleSearchMetadata
 from app.llm import LangchainDeepSeek
@@ -82,6 +81,7 @@ class SERPCrawler(BaseAsyncRequest):
             news_title = [i.get('title') for i in news[:5]]
             thumbnail = news[0].get('thumbnail') if news else ''
 
+
             content = await self.general_content(news_title)
             return {
                 "content": content,
@@ -93,8 +93,15 @@ class SERPCrawler(BaseAsyncRequest):
         
     async def general_content(self, content: list[str]) -> str:
         try:
-            user_message = f"Generate a short Vietnamese description for the following content: {content} in context of Google Trends."
-            response = await summarizer.generate_response(user_message)
+            messages = [
+                {"role": "system",
+                "content": "Only return answer. no explain"},
+                {
+                "role": "user",
+                "content": f"Generate a short Vietnamese description for the following content: {content}"
+                }
+            ]
+            response = await summarizer.generate_response(messages)
             return response
         except Exception as e:
             logger.error(f"Error summarizing content from SERP: {e}")
