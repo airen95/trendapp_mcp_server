@@ -11,7 +11,8 @@ class Settings(CommonConfig):
     YOUTUBE_API_KEY: str
     REDDIT_CLIENT: str
     REDDIT_TOKEN: str
-    GEMINI_KEY: str
+    SERP_TOKEN: str
+    LLM_TOKEN: setattr
 
 
 settings = Settings()

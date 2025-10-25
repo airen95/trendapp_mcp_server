@@ -4,13 +4,12 @@ from .base import BaseAsyncRequest
 from app.const.url import YOUTUBE
 from app.schemas.posts import YoutubePost, BasePost
 from loguru import logger
+from datetime import datetime
 
 
 class YoutubeTrendingCrawler(BaseAsyncRequest):
     def __init__(self):
-        headers = {
-            "Authorization": f"Bearer {settings.YOUTUBE_API_KEY}",
-        }
+        headers = {}
         super().__init__(YOUTUBE, headers)
 
     async def health_check(self) -> dict:
@@ -25,7 +24,10 @@ class YoutubeTrendingCrawler(BaseAsyncRequest):
             logger.error(f"YouTube health check failed: {e}")
             return {"status": "unhealthy", "service": "youtube", "error": str(e)}
 
-    async def get_trending_videos(self, region_code: str = 'US', max_results: int = 10) -> list[dict]:
+    async def get_trending_videos(self, region_code: str = 'VN',
+                                  max_results: int = 5,
+                                  category_id: int = None,
+                                  tags: list[str] = ['top-chart']) -> list[dict]:
         """
         Fetch trending videos from YouTube for a specific region.
         
@@ -43,6 +45,8 @@ class YoutubeTrendingCrawler(BaseAsyncRequest):
             'chart': 'mostPopular',
             'regionCode': region_code,
             'maxResults': max_results,
+            "key": settings.YOUTUBE_API_KEY,
+            "videoCategoryId": category_id
         }
         
         try:
@@ -56,17 +60,19 @@ class YoutubeTrendingCrawler(BaseAsyncRequest):
             for item in response.get('items', []):
                 trending_videos.append(
                     BasePost(
+                        source="youtube",
+                        uid=item['id'],
                         title=item['snippet']['title'],
                         content=item['snippet']['description'],
                         created_at=item['snippet']['publishedAt'],
                         author=item['snippet']['channelTitle'],
-                        metadata=YoutubePost(
-                            video_id=item['id'],
+                        url=f"https://www.youtube.com/watch?v=${item['id']}",
+                        tags=set(tags),
+                        metadata_=YoutubePost(
                             view_count=item['statistics'].get('viewCount', 0),
                             like_count=item['statistics'].get('likeCount', 0),
                             thumbnail=item['snippet']['thumbnails']['high']['url']
                         ),
-                        relevance_score=self._calculate_relevance(item["statistics"])
                     )
                 )
             return trending_videos

@@ -1,15 +1,17 @@
 import requests
 from typing import List, Dict
+import asyncio
 
-from .base import BaseAsyncRequest
+from .base import BaseAsyncRequest, BaseHTMLRequest
 from app.const.url import HUGGINGFACE
-
+from app.schemas.posts import BasePost, HFPost
 
 class HuggingFaceCrawler(BaseAsyncRequest):
     def __init__(self):
         super().__init__(HUGGINGFACE, {})
+        self.parser = BaseHTMLRequest()
 
-    async def get_trending_papers(self) -> List[Dict]:
+    async def get_trending_papers(self, tags: list[str] = ['paper']) -> List[Dict]:
         """
         Get trending models from Hugging Face
         """
@@ -22,9 +24,24 @@ class HuggingFaceCrawler(BaseAsyncRequest):
             )
             
             trending_list = []
-            for paper in response:
-                trending_list.append(paper)
-            
+            for paper in response[:3]:
+                paper_url = paper.get("link")
+                content = await self.get_paper_content(paper_url)
+                trending_list.append(BasePost(
+                    source = "hf",
+                    uid=paper_url.split("/")[-1],
+                    title=paper.get("title"),
+                    url = paper_url,
+                    author=paper.get("submittedBy"),
+                    content=content,
+                    metadata_=HFPost(
+                        thumbnail=paper.get("image"),
+                        upvotes=paper.get("upvotes")
+                    ),
+                    tags=set(tags)
+                ),
+                )
+                await asyncio.sleep(0.5)
             return trending_list
         
         except requests.exceptions.RequestException as e:
@@ -33,3 +50,6 @@ class HuggingFaceCrawler(BaseAsyncRequest):
         
     async def health_check(self):
         return await super().health_check()
+    
+    async def get_paper_content(self,paper_url: str) -> str:
+        return await self.parser.find_one(paper_url, 'text-blue')

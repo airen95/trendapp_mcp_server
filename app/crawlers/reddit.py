@@ -22,7 +22,7 @@ class RedditTrendingCrawler:
                 logger.error(f"Failed to initialize Reddit client: {e}")
                 raise e
     
-    async def get_trending_posts(self, subreddit_name='all', limit=50, time_filter='day') -> list[dict]:
+    async def get_trending_posts(self, subreddit_name='all', limit=50, time_filter='day', tags: list[str] = ['thread']) -> list[dict]:
         """
         Fetch trending posts from a Reddit subreddit.
         
@@ -45,19 +45,19 @@ class RedditTrendingCrawler:
                     BasePost(
                         source="reddit",
                         title=post.title,
+                        uid=post.id,
                         content=post.selftext,
                         url=post.url,
                         created_at=datetime.fromtimestamp(post.created_utc),
                         author=post.subreddit.display_name,
                         metadata=RedditPost(
-                            post_id=post.id,
                             permalink=f"https://reddit.com{post.permalink}",
                             upvote_ratio=post.upvote_ratio
                         ),
-                        relevance_score=post.upvote_ratio * post.score / 100 if post.upvote_ratio else 0
+                        tags=set(tags)
                     )
                 )            
-            return sorted(trending_posts, key=lambda x: x['score'], reverse=True)
+            return trending_posts
         except Exception as e:
             print(f"Error fetching trending posts from r/{subreddit_name}: {e}")
             return []

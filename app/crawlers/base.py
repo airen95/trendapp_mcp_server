@@ -4,6 +4,9 @@ from typing import Optional, Any
 from loguru import logger
 import asyncio
 
+from bs4 import BeautifulSoup as BS
+
+
 class BaseAsyncRequest(ABC):
     def __init__(self,
                 url: str,
@@ -110,3 +113,31 @@ class BaseAsyncRequest(ABC):
     @abstractmethod
     async def health_check(self) -> dict[str, Any]:
         pass
+
+class MyDummyClass(BaseAsyncRequest):
+    def __init__(self, url: str, headers: dict):
+        self.url = url
+        self.headers = headers
+
+    async def health_check(self):
+        return await super().health_check()
+
+class BaseHTMLRequest:
+
+    def _initialize(self):
+        return MyDummyClass
+
+    async def find_one(self, page_url: str, xpath_contains: str) -> str | None:
+        try:
+
+            MyDummyClass = self._initialize()
+            requester = MyDummyClass(page_url, {})
+
+            html_content = await requester.get()
+            soup = BS(html_content.get('response'), 'html.parser')
+            elements = soup.find_all('p', class_=lambda x: x and xpath_contains in x)
+            texts = [el.get_text(strip=True) for el in elements]
+            return texts[0] if texts else None
+        except Exception as e:
+            logger.warning(f"Parsing get error: {e}")
+            return None
