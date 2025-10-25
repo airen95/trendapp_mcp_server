@@ -9,8 +9,8 @@ PREDEFINED_TAGS = [
     "community",
     "news",
     "social",
-    # "meme",
-    # "ask",
+    "meme",
+    "ask",
     
     # YouTube video types
     "video",
@@ -28,8 +28,8 @@ PREDEFINED_TAGS = [
     "machine learning",
     "computer vision",
     "nlp",
-    # "computer_vision",
-    # "machine_learning",
+    "computer_vision",
+    "machine_learning",
     
     # Cross-platform content tags
     "technology",
