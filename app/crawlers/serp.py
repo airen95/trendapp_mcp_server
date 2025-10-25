@@ -41,6 +41,7 @@ class SERPCrawler(BaseAsyncRequest):
                 params=params
                 )
             data = []
+            search_id = response.get("search_metadata", {}).get("id", "")
             for item in response.get("trending_searches", [])[:5]:
                 news_supp = await self.get_trend_description(item.get("news_page_token"))
                 categories = [i.get('name').lower() for i in item.get("categories", [])] or tags
@@ -48,7 +49,8 @@ class SERPCrawler(BaseAsyncRequest):
                 data.append(BasePost(
                     source="serp",
                     title=item.get("query"),
-                    url="",
+                    uid=f"{search_id}_{item.get('start_timestamp')}",
+                    url=item.get(""),
                     author="",
                     content=news_supp.get("start_timestamp", ""),
                     tags=set(categories),

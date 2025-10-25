@@ -29,6 +29,7 @@ class HuggingFaceCrawler(BaseAsyncRequest):
                 content = await self.get_paper_content(paper_url)
                 trending_list.append(BasePost(
                     source = "hf",
+                    uid=paper_url.split("/")[-1],
                     title=paper.get("title"),
                     url = paper_url,
                     author=paper.get("submittedBy"),

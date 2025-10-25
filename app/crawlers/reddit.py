@@ -45,12 +45,12 @@ class RedditTrendingCrawler:
                     BasePost(
                         source="reddit",
                         title=post.title,
+                        uid=post.id,
                         content=post.selftext,
                         url=post.url,
                         created_at=datetime.fromtimestamp(post.created_utc),
                         author=post.subreddit.display_name,
                         metadata=RedditPost(
-                            post_id=post.id,
                             permalink=f"https://reddit.com{post.permalink}",
                             upvote_ratio=post.upvote_ratio
                         ),

@@ -8,6 +8,7 @@ from app.crawlers import (
 from app.tools.tag_parser import parse_tags
 from app.const.tags import get_predefined_tags_prompt
 from app.schemas.posts import ToolResponse
+from app.utils import deduplicate_posts
 from loguru import logger
 from typing import Any
 
@@ -48,7 +49,7 @@ async def get_predefined_tags() -> dict:
 async def process_interest(
     tags: list[str],
     region_code: str = "VN",
-    max_results_per_crawler: int = 20,
+    max_results_per_crawler: int = 5,
 ) -> dict:
     """
     Process user interest and fetch trending content from appropriate crawlers.
@@ -124,8 +125,9 @@ async def process_interest(
             logger.error(f"Error fetching from {crawler_name}: {e}")
             # Continue with other crawlers even if one fails
     
+
     return ToolResponse(
-        data=all_data,
+        data=deduplicate_posts(all_data),
         total=len(all_data),
         metadata=metadata
     )

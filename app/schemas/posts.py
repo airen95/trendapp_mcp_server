@@ -5,6 +5,7 @@ from datetime import datetime
 
 class BasePost(BaseModel):
     source: str = Field(...)
+    uid: str = Field(...)
     title: str
     content: Optional[str] = None
     author: str
@@ -14,13 +15,11 @@ class BasePost(BaseModel):
     metadata_: Optional[Any] = None
 
 class YoutubePost(BaseModel):
-    video_id: str
     view_count: int
     like_count: int
     thumbnail: str
 
 class RedditPost(BaseModel):
-    post_id: str
     permalink: Optional[str] = None
     upvote_ratio: Optional[float] = None
 

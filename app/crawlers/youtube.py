@@ -61,6 +61,7 @@ class YoutubeTrendingCrawler(BaseAsyncRequest):
                 trending_videos.append(
                     BasePost(
                         source="youtube",
+                        uid=item['id'],
                         title=item['snippet']['title'],
                         content=item['snippet']['description'],
                         created_at=item['snippet']['publishedAt'],
@@ -68,7 +69,6 @@ class YoutubeTrendingCrawler(BaseAsyncRequest):
                         url=f"https://www.youtube.com/watch?v=${item['id']}",
                         tags=set(tags),
                         metadata_=YoutubePost(
-                            video_id=item['id'],
                             view_count=item['statistics'].get('viewCount', 0),
                             like_count=item['statistics'].get('likeCount', 0),
                             thumbnail=item['snippet']['thumbnails']['high']['url']
