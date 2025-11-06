@@ -1,3 +1,8 @@
+"""
+Predefined tag system with explicit crawler and category mappings.
+This provides a controlled vocabulary for LLMs to use.
+"""
+
 from typing import List, Dict, Optional, Set
 from dataclasses import dataclass
 
@@ -25,8 +30,7 @@ PREDEFINED_TAGS = [
     "dataset",
     "paper",
     "ai",
-    "machine learning",
-    "computer vision",
+    "ml",
     "nlp",
     "computer_vision",
     "machine_learning",
@@ -52,6 +56,7 @@ PREDEFINED_TAGS = [
     "pets",
 ]
 
+
 @dataclass
 class CrawlerMapping:
     """Defines which crawler(s) and category to use for a tag"""
@@ -61,6 +66,7 @@ class CrawlerMapping:
 
 
 # Tag to Crawler/Category mappings
+# Each tag can map to multiple crawlers with different categories
 TAG_MAPPINGS: Dict[str, List[CrawlerMapping]] = {
     # Entertainment
     "movies": [
